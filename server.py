@@ -19,86 +19,47 @@ print(msg)
 
 conn.close()
 
-# Импортируем необходимые модули
-import socket
-import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm  # Для прогресс-бара
+import socket  # Модуль для работы с сокетами
+import threading  # Модуль для работы с потоками
 
-# Запрашиваем у пользователя имя хоста или IP-адрес для сканирования
-host = input("Пожалуйста, введите имя хоста или IP-адрес для сканирования: ")
+def client_handler(conn, addr):
+    # Функция для обработки взаимодействия с клиентом в отдельном потоке
+    print(f"Подключен клиент {addr}")
+    msg = ''
+    while True:
+        # Бесконечный цикл для приема данных от клиента
+        data = conn.recv(1024)
+        # Получаем данные размером до 1024 байт
+        if not data:
+            # Если данных нет, значит клиент отключился
+            break
+        msg = data.decode()
+        # Декодируем байтовые данные в строку
+        print(f"Получено сообщение от {addr}: {msg}")
+        conn.send(data)
+        # Отправляем данные обратно клиенту (эхо)
+    print(f"Клиент {addr} отключился")
+    conn.close()
+    # Закрываем соединение с данным клиентом
 
-# Пытаемся разрешить имя хоста в IP-адрес
-try:
-    host_ip = socket.gethostbyname(host)
-except socket.gaierror:
-    print(f"Имя хоста '{host}' не может быть разрешено. Выход.")
-    sys.exit()
+def main():
+    sock = socket.socket()
+    # Создаем сокет (TCP по умолчанию)
+    sock.bind(('', 9090))
+    # Связываем сокет с адресом и портом. Пустая строка означает, что сервер будет принят запросы с любых сетевых интерфейсов.
+    sock.listen()
+    # Переводим сокет в режим прослушивания входящих подключений
+    print("Сервер запущен и ожидает подключений...")
+    while True:
+        # Бесконечный цикл для принятия новых клиентов
+        conn, addr = sock.accept()
+        # Принимаем новое входящее подключение
+        # conn — новый сокет для обмена данными с клиентом
+        # addr — адрес клиента
+        client_thread = threading.Thread(target=client_handler, args=(conn, addr))
+        # Создаем новый поток для обслуживания клиента
+        client_thread.start()
+        # Запускаем поток
 
-# Определяем диапазон портов для сканирования
-start_port = 1      # Начальный номер порта
-end_port = 1024     # Конечный номер порта
-# Примечание: измените end_port на 65535, чтобы сканировать все возможные порты
-
-# Информируем пользователя о начале сканирования
-print(f"Начинаем сканирование хоста {host} ({host_ip}) с порта {start_port} до {end_port}")
-
-# Определяем функцию, которая будет сканировать один порт
-def scan_port(port):
-    """
-    Пытается подключиться к заданному хосту на указанном порту.
-    Возвращает номер порта, если он открыт.
-    """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(1)  # Таймаут в секундах
-    result = sock.connect_ex((host_ip, port))
-    sock.close()
-    if result == 0:
-        # Если попытка подключения возвращает 0, порт открыт
-        return port
-    else:
-        # Порт закрыт или фильтруется
-        return None
-
-# Список для хранения открытых портов
-open_ports = []
-
-try:
-    # Используем ThreadPoolExecutor для управления пулом потоков
-    with ThreadPoolExecutor(max_workers=100) as executor:
-        # Словарь для отслеживания соответствия future и порта
-        future_to_port = {executor.submit(scan_port, port): port for port in range(start_port, end_port + 1)}
-        
-        # Создаем прогресс-бар
-        with tqdm(total=end_port - start_port + 1, desc="Сканирование портов") as pbar:
-            for future in as_completed(future_to_port):
-                port = future_to_port[future]
-                try:
-                    result = future.result()
-                    if result is not None:
-                        open_ports.append(result)
-                except KeyboardInterrupt:
-                    print("\nСканирование прервано пользователем.")
-                    sys.exit()
-                except Exception as exc:
-                    print(f"Порт {port} вызвал исключение: {exc}")
-                finally:
-                    pbar.update(1)
-except KeyboardInterrupt:
-    print("\nСканирование прервано пользователем.")
-    sys.exit()
-except socket.error as e:
-    print(f"Ошибка сокета: {e}")
-    sys.exit()
-
-# После сканирования выводим открытые порты по порядку
-open_ports.sort()
-if open_ports:
-    print("Открытые порты:")
-    for port in open_ports:
-        print(f"Порт {port} открыт")
-else:
-    print("В указанном диапазоне не найдено открытых портов.")
-
-# Информируем пользователя о завершении сканирования
-print("Сканирование завершено.")
+if __name__ == "__main__":
+    main()
