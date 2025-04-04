@@ -1,5 +1,5 @@
 import socket
-
+import threading  # Модуль для работы с потоками
 sock = socket.socket()
 sock.bind(('', 9090))
 sock.listen(0)
@@ -18,9 +18,6 @@ while True:
 print(msg)
 
 conn.close()
-
-import socket  # Модуль для работы с сокетами
-import threading  # Модуль для работы с потоками
 
 def client_handler(conn, addr):
     # Функция для обработки взаимодействия с клиентом в отдельном потоке
